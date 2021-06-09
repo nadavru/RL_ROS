@@ -54,7 +54,7 @@ class PolicyTrainer(object):
 class BaseTrainer(ABC):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
@@ -62,8 +62,9 @@ class BaseTrainer(ABC):
         gamma: float = 0.99,
         with_baseline: bool = False,
         device = "cpu",
+        **kw,
     ):
-        self.model = model
+        self.model = policy
         self.optimizer = optimizer(self.model.parameters(), lr=lr)
         self.entropy_coef = entropy_coef
         self.gamma = gamma
