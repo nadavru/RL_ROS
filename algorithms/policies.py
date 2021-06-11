@@ -46,51 +46,21 @@ class QNetwork(nn.Module):
         
         return selected_action
 
-class QNetworkPolicy(nn.Module):
-    def __init__(self, in_features, out_actions, h_dims=None, **kw):
-        """
-        Create a model which represents the agent's policy.
-        :param in_features: Number of input features (in one observation).
-        :param out_actions: Number of output actions.
-        :param kw: Any extra args needed to construct the model.
-        """
-        super().__init__()
 
-        # ====== YOUR CODE: ======
-
-        activation = nn.ReLU
-
-        if h_dims is None:
-            h_dims = [64,64]
-
-        layers = []
-        in_dim = in_features
-        for h_dim in h_dims:
-            layers.append(nn.Linear(in_features=in_dim, out_features=h_dim))
-            layers.append(activation())
-            in_dim = h_dim
-        layers.append(nn.Linear(in_features=in_dim, out_features=out_actions))
-        self.q_net = nn.Sequential(*layers)
-
-        self.params = {"class": self.__class__, "in_features": in_features, "out_actions": out_actions, "h_dims": h_dims}
-        # ========================
-
+class BaseNetwork(nn.Module):
     def forward(self, x):
-        # ====== YOUR CODE: ======
-        action_scores = self.q_net(x)
-        # ========================
+
+        action_scores = self.policy_net(x)
         return action_scores
     
     def predict(self, state):
 
         with torch.no_grad():
             actions_prob = torch.squeeze(self(state))
-            selected_action = actions_prob.argmax(dim=0)
         
-        return selected_action.item()
+        return actions_prob.cpu()
 
-
-class DQNPolicy(nn.Module):
+class QNetworkPolicy(BaseNetwork):
     def __init__(self, in_features, out_actions, h_dims=None, **kw):
         """
         Create a model which represents the agent's policy.
@@ -114,7 +84,37 @@ class DQNPolicy(nn.Module):
             layers.append(activation())
             in_dim = h_dim
         layers.append(nn.Linear(in_features=in_dim, out_features=out_actions))
-        self.q_net_policy = nn.Sequential(*layers)
+        self.policy_net = nn.Sequential(*layers)
+
+        self.params = {"class": self.__class__, "in_features": in_features, "out_actions": out_actions, "h_dims": h_dims}
+        # ========================
+
+
+class DQNPolicy(BaseNetwork):
+    def __init__(self, in_features, out_actions, h_dims=None, **kw):
+        """
+        Create a model which represents the agent's policy.
+        :param in_features: Number of input features (in one observation).
+        :param out_actions: Number of output actions.
+        :param kw: Any extra args needed to construct the model.
+        """
+        super().__init__()
+
+        # ====== YOUR CODE: ======
+
+        activation = nn.ReLU
+
+        if h_dims is None:
+            h_dims = [64,64]
+
+        layers = []
+        in_dim = in_features
+        for h_dim in h_dims:
+            layers.append(nn.Linear(in_features=in_dim, out_features=h_dim))
+            layers.append(activation())
+            in_dim = h_dim
+        layers.append(nn.Linear(in_features=in_dim, out_features=out_actions))
+        self.policy_net = nn.Sequential(*layers)
         
         layers = []
         in_dim = in_features
@@ -123,7 +123,7 @@ class DQNPolicy(nn.Module):
             layers.append(activation())
             in_dim = h_dim
         layers.append(nn.Linear(in_features=in_dim, out_features=out_actions))
-        self.q_net_target = nn.Sequential(*layers)
+        self.target_net = nn.Sequential(*layers)
 
         self.update_target()
         self.params = {"class": self.__class__, "in_features": in_features, "out_actions": out_actions, "h_dims": h_dims}
@@ -131,24 +131,10 @@ class DQNPolicy(nn.Module):
 
     def update_target(self):
 
-        self.q_net_target.load_state_dict(self.q_net_policy.state_dict())
-
-    def forward(self, x):
-        # ====== YOUR CODE: ======
-        action_scores = self.q_net_policy(x)
-        # ========================
-        return action_scores
-    
-    def predict(self, state):
-
-        with torch.no_grad():
-            actions_prob = torch.squeeze(self(state))
-            selected_action = actions_prob.argmax(dim=0)
-        
-        return selected_action.item()
+        self.target_net.load_state_dict(self.policy_net.state_dict())
 
 
-class AACPolicy(nn.Module):
+class AACPolicy(BaseNetwork):
     def __init__(self, in_features, out_actions, h_dims=None, ortho_init=True, **kw):
         """
         Create a model which represents the agent's policy.
@@ -203,20 +189,6 @@ class AACPolicy(nn.Module):
             nn.init.orthogonal_(module.weight, gain=gain)
             if module.bias is not None:
                 module.bias.data.fill_(0.0)
-
-    def forward(self, x):
-        # ====== YOUR CODE: ======
-        action_scores = self.policy_net(x)
-        # ========================
-        return action_scores
-    
-    def predict(self, state):
-
-        with torch.no_grad():
-            actions_prob = torch.squeeze(self(state))
-            selected_action = actions_prob.argmax(dim=0)
-        
-        return selected_action.item()
 
 PPOPolicy = AACPolicy
 
