@@ -54,7 +54,7 @@ class PolicyTrainer(object):
 class BaseTrainer(ABC):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
@@ -62,8 +62,9 @@ class BaseTrainer(ABC):
         gamma: float = 0.99,
         with_baseline: bool = False,
         device = "cpu",
+        **kw,
     ):
-        self.model = model
+        self.model = policy
         self.optimizer = optimizer(self.model.parameters(), lr=lr)
         self.entropy_coef = entropy_coef
         self.gamma = gamma
@@ -141,7 +142,7 @@ class QNetworkTrainer(BaseTrainer):
 class DQNTrainer(BaseTrainer):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
@@ -151,9 +152,10 @@ class DQNTrainer(BaseTrainer):
         target_update: int = 10,
         with_baseline: bool = False,
         device = "cpu",
+        **kw,
     ):
         super(DQNTrainer, self).__init__(
-            model, 
+            policy, 
             optimizer, 
             lr, 
             num_actions, 
@@ -161,6 +163,7 @@ class DQNTrainer(BaseTrainer):
             gamma, 
             with_baseline, 
             device,
+            **kw,
         )
         
         self.max_grad_norm = max_grad_norm
@@ -212,7 +215,7 @@ class DQNTrainer(BaseTrainer):
 class AACTrainer(BaseTrainer):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
@@ -224,9 +227,10 @@ class AACTrainer(BaseTrainer):
         with_baseline: bool = False,
         normalize_advantages: bool = False,
         device = "cpu",
+        **kw,
     ):
         super(AACTrainer, self).__init__(
-            model, 
+            policy, 
             optimizer, 
             lr, 
             num_actions, 
@@ -234,6 +238,7 @@ class AACTrainer(BaseTrainer):
             gamma, 
             with_baseline, 
             device,
+            **kw,
         )
         
         self.max_grad_norm = max_grad_norm
@@ -299,7 +304,7 @@ class AACTrainer(BaseTrainer):
 class PPOTrainer(BaseTrainer):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
@@ -313,9 +318,10 @@ class PPOTrainer(BaseTrainer):
         n_epochs: int = 10,
         clip_range: float = 0.2,
         device = "cpu",
+        **kw,
     ):
         super(PPOTrainer, self).__init__(
-            model, 
+            policy, 
             optimizer, 
             lr, 
             num_actions, 
@@ -323,6 +329,7 @@ class PPOTrainer(BaseTrainer):
             gamma, 
             with_baseline, 
             device,
+            **kw,
         )
         
         self.max_grad_norm = max_grad_norm
