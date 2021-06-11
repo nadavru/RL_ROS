@@ -101,6 +101,7 @@ if __name__ == '__main__':
         "buffer_size" : 1000,
         "batch_size" : 32,
         "gamma" : 0.99,
+        "tau" : 1.0,
         "eps" : 0.1,
         "entropy_coef" : [0.3, 1],
         "target_update" : [10, 100],

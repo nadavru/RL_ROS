@@ -142,6 +142,7 @@ class DQNTrainer(BaseTrainer):
         max_grad_norm: float,
         entropy_coef: float = 0.3, #for entropy
         gamma: float = 0.99,
+        tau: float = 1.0,
         target_update: int = 10,
         device = "cpu",
         **kw,
@@ -158,12 +159,8 @@ class DQNTrainer(BaseTrainer):
         )
         
         self.max_grad_norm = max_grad_norm
+        self.tau = tau
         self.target_update = target_update
-    
-    def clip_policy_grads(self):
-        for param in self.model.policy_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        # nn.utils.clip_grad_norm_(self.model.policy_net.parameters(), self.max_grad_norm)
 
     def train_batch(self, batch: TrainBatch):
 
@@ -184,11 +181,11 @@ class DQNTrainer(BaseTrainer):
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
-        self.clip_policy_grads()
+        self.model.clip_grads(self.model.policy_net, -self.max_grad_norm, self.max_grad_norm)
         self.optimizer.step()
         
         if self.current_episode % self.target_update == 0:
-            self.model.update_target()
+            self.model.soft_update(self.model.target_net, self.model.policy_net, tau=self.tau)
         
         loss = loss.to("cpu").item()
         print("total_loss = ", loss)
@@ -229,13 +226,6 @@ class AACTrainer(BaseTrainer):
         self.value_coef = value_coef
         self.gae_coef = gae_coef
         self.normalize_advantages = normalize_advantages
-    
-    def clip_grads(self):
-        for param in self.model.policy_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        for param in self.model.state_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        # nn.utils.clip_grad_norm_(self.parameters(), self.max_grad_norm)
 
     def train_batch(self, batch: TrainBatch):
 
@@ -269,7 +259,8 @@ class AACTrainer(BaseTrainer):
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
-        self.clip_grads()
+        self.model.clip_grads(self.model.policy_net, -self.max_grad_norm, self.max_grad_norm)
+        self.model.clip_grads(self.model.state_net, -self.max_grad_norm, self.max_grad_norm)
         self.optimizer.step()
         
         loss = loss.to("cpu").item()
@@ -316,13 +307,6 @@ class PPOTrainer(BaseTrainer):
         self.normalize_advantages = normalize_advantages
         self.n_epochs = n_epochs
         self.clip_range = clip_range
-    
-    def clip_grads(self):
-        for param in self.model.policy_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        for param in self.model.state_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        # nn.utils.clip_grad_norm_(self.parameters(), self.max_grad_norm)
 
     def train_batch(self, batch: TrainBatch):
 
@@ -375,7 +359,8 @@ class PPOTrainer(BaseTrainer):
             # Optimize the model
             self.optimizer.zero_grad()
             loss.backward()
-            self.clip_grads()
+            self.model.clip_grads(self.model.policy_net, -self.max_grad_norm, self.max_grad_norm)
+            self.model.clip_grads(self.model.state_net, -self.max_grad_norm, self.max_grad_norm)
             self.optimizer.step()
         
         def mean(l):
