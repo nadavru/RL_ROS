@@ -1,8 +1,7 @@
 import rospy
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
-import sys, select, os
-import time
+import os
 import numpy as np
 from gazebo_msgs.msg import ModelStates
 from data import Experience, ReplayMemory

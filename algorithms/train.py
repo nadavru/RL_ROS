@@ -5,51 +5,6 @@ from data import Experience, TrainBatch
 from typing import List
 from abc import ABC, abstractmethod
 
-class PolicyTrainer(object):
-    def __init__(
-        self,
-        model: nn.Module,
-        optimizer: optim.Optimizer,
-        loss: nn.Module,
-    ):
-        self.model = model
-        self.optimizer = optimizer
-        self.loss_fn = loss
-    
-    def to(self, device):
-        self.model.to(device)
-        self.loss_fn.to(device)
-
-    def train_batch(self, batch: TrainBatch):
-        total_loss = None
-        #  Complete the training loop for your model.
-        #  Note that this Trainer supports multiple loss functions, stored
-        #  in the list self.loss_functions, each returning a loss tensor and
-        #  a dict (as we've implemented above).
-        #   - Forward pass
-        #   - Calculate loss with each loss function. Sum the losses and
-        #     Combine the dict returned from each loss function into the
-        #     losses_dict variable (use dict.update()).
-        #   - Backprop.
-        #   - Update model parameters.
-        # ====== YOUR CODE: ======
-        total_loss = torch.Tensor([0])
-        pred = self.model(batch.states)
-        #print(f"\n{batch.action_vals=}\n{pred=}")
-
-        loss = self.loss_fn(batch, pred)
-
-        if isinstance(loss, tuple):
-            loss = loss[0].to("cpu")
-        total_loss += loss
-
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        self.optimizer.step()
-        # ========================
-        print("loss = ", total_loss.item())
-
-        return total_loss
 
 class BaseTrainer(ABC):
     def __init__(
@@ -99,6 +54,7 @@ class BaseTrainer(ABC):
         Train the policy according to batch.
         Return tuple of loss, and a dictionary of all the losses
         """
+        pass
 
 
 class QNetworkTrainer(BaseTrainer):        
