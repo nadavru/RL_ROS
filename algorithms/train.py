@@ -60,7 +60,6 @@ class BaseTrainer(ABC):
         num_actions: int,
         entropy_coef: float = 0.3, #for entropy
         gamma: float = 0.99,
-        with_baseline: bool = False,
         device = "cpu",
         **kw,
     ):
@@ -68,7 +67,6 @@ class BaseTrainer(ABC):
         self.optimizer = optimizer(self.model.parameters(), lr=lr)
         self.entropy_coef = entropy_coef
         self.gamma = gamma
-        self.with_baseline = with_baseline
         if isinstance(device, str):
             self.device = torch.device("cuda" if device=="cuda" and torch.cuda.is_available() else "cpu")
         else:
@@ -112,10 +110,6 @@ class QNetworkTrainer(BaseTrainer):
 
         expected_state_action_values = (next_state_values * self.gamma) + batch.rewards
 
-        baseline = expected_state_action_values.mean()
-        if self.with_baseline:
-            expected_state_action_values -= baseline
-
         action_scores = self.model(batch.states)
         loss_e = self.entropy_loss(action_scores)
         state_action_values = action_scores.gather(1, batch.actions[..., None])
@@ -135,8 +129,7 @@ class QNetworkTrainer(BaseTrainer):
         return loss, dict(
             loss=loss, \
             loss_p=loss_p.to("cpu").item(), \
-            loss_e=loss_e.to("cpu").item(), \
-            baseline=baseline.to("cpu").item())
+            loss_e=loss_e.to("cpu").item())
 
 
 class DQNTrainer(BaseTrainer):
@@ -150,7 +143,6 @@ class DQNTrainer(BaseTrainer):
         entropy_coef: float = 0.3, #for entropy
         gamma: float = 0.99,
         target_update: int = 10,
-        with_baseline: bool = False,
         device = "cpu",
         **kw,
     ):
@@ -160,8 +152,7 @@ class DQNTrainer(BaseTrainer):
             lr, 
             num_actions, 
             entropy_coef, 
-            gamma, 
-            with_baseline, 
+            gamma,  
             device,
             **kw,
         )
@@ -170,20 +161,16 @@ class DQNTrainer(BaseTrainer):
         self.target_update = target_update
     
     def clip_policy_grads(self):
-        for param in self.model.q_net_policy.parameters():
+        for param in self.model.policy_net.parameters():
             param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        # nn.utils.clip_grad_norm_(self.q_net_policy.parameters(), self.max_grad_norm)
+        # nn.utils.clip_grad_norm_(self.model.policy_net.parameters(), self.max_grad_norm)
 
     def train_batch(self, batch: TrainBatch):
 
-        next_state_values = self.model.q_net_target(batch.next_states).max(dim=1)[0].detach() * (~batch.is_dones)
+        next_state_values = self.model.target_net(batch.next_states).max(dim=1)[0].detach() * (~batch.is_dones)
         # next_state_values[batch.is_dones] = torch.zeros(torch.sum(batch.is_dones).item(), device=self.device)
 
         expected_state_action_values = (next_state_values * self.gamma) + batch.rewards
-
-        baseline = expected_state_action_values.mean()
-        if self.with_baseline:
-            expected_state_action_values -= baseline
 
         action_scores = self.model(batch.states)
         loss_e = self.entropy_loss(action_scores)
@@ -208,8 +195,7 @@ class DQNTrainer(BaseTrainer):
         return loss, dict(
             loss=loss, \
             loss_p=loss_p.to("cpu").item(), \
-            loss_e=loss_e.to("cpu").item(), \
-            baseline=baseline.to("cpu").item())
+            loss_e=loss_e.to("cpu").item())
 
 
 class AACTrainer(BaseTrainer):
@@ -224,7 +210,6 @@ class AACTrainer(BaseTrainer):
         value_coef: float = 0.5,
         gae_coef: float = 1.0,
         gamma: float = 0.99,
-        with_baseline: bool = False,
         normalize_advantages: bool = False,
         device = "cpu",
         **kw,
@@ -236,7 +221,6 @@ class AACTrainer(BaseTrainer):
             num_actions, 
             entropy_coef, 
             gamma, 
-            with_baseline, 
             device,
             **kw,
         )
@@ -280,10 +264,6 @@ class AACTrainer(BaseTrainer):
         weighted_avg_experience_rewards = selected_action_log_proba * advantages
         loss_p = -weighted_avg_experience_rewards.mean()
 
-        '''baseline = expected_state_action_values.mean()
-        if self.with_baseline:
-            expected_state_action_values -= baseline'''
-
         loss = loss_p + self.entropy_coef*loss_e + self.value_coef*loss_v
 
         # Optimize the model
@@ -313,7 +293,6 @@ class PPOTrainer(BaseTrainer):
         value_coef: float = 0.5,
         gae_coef: float = 1.0,
         gamma: float = 0.99,
-        with_baseline: bool = False,
         normalize_advantages: bool = False,
         n_epochs: int = 10,
         clip_range: float = 0.2,
@@ -327,7 +306,6 @@ class PPOTrainer(BaseTrainer):
             num_actions, 
             entropy_coef, 
             gamma, 
-            with_baseline, 
             device,
             **kw,
         )

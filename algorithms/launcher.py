@@ -94,16 +94,17 @@ if __name__ == '__main__':
 
     ######################## defining parameters
     DQNParams = {
+        "algorithm" : "DQN",
         "DQN" : "DQN",
         "hidden_layers" : None,
         "lr" : 0.0001,
         "buffer_size" : 1000,
         "batch_size" : 32,
         "gamma" : 0.99,
+        "eps" : 0.1,
         "entropy_coef" : [0.3, 1],
         "target_update" : [10, 100],
         "max_grad_norm" : 10,
-        "with_baseline" : False,
         "off_policy" : True,
         "optimizer" : optim.Adam
     }
@@ -115,8 +116,8 @@ if __name__ == '__main__':
         "buffer_size" : 1000,
         "batch_size" : 32,
         "gamma" : 0.99,
+        "eps" : 0.1,
         "entropy_coef" : [0.3, 1],
-        "with_baseline" : False,
         "off_policy" : True,
         "optimizer" : optim.Adam
     }
@@ -128,9 +129,9 @@ if __name__ == '__main__':
         "buffer_size" : None,
         "batch_size" : -1,
         "gamma" : 0.99,
+        "eps" : 0.1,
         "entropy_coef" : 1,
         "max_grad_norm" : 0.5,
-        "with_baseline" : False,
         "off_policy" : False,
         "optimizer" : optim.Adam,
         "ortho_init" : True,
@@ -146,6 +147,7 @@ if __name__ == '__main__':
         "buffer_size" : None,
         "batch_size" : -1,
         "gamma" : 0.99,
+        "eps" : 0.1,
         "entropy_coef" : 1 ,
         "max_grad_norm" : 0.5,
         "with_baseline" : False,
@@ -188,6 +190,7 @@ if __name__ == '__main__':
 
     chosen_params = params.all_parameters[alg-1]
     algorithm = chosen_params["algorithm"]
+    print(f"Training with {algorithm}")
     Policy = Policies[algorithm]
     Trainer = Trainers[algorithm]
 
@@ -205,6 +208,7 @@ if __name__ == '__main__':
         capacity=chosen_params["buffer_size"], 
         batch_size=chosen_params["batch_size"], 
         gamma=chosen_params["gamma"], 
+        eps=chosen_params["eps"], 
         off_policy=chosen_params["off_policy"], 
         save_every=save_every, 
         folder=f"model_{alg}")
