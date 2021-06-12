@@ -137,3 +137,33 @@ class AACPolicy(BaseNetwork):
 
 PPOPolicy = AACPolicy
 
+class SACPolicy(BaseNetwork):
+    def __init__(self, in_features, out_actions, h_dims=None, **kw):
+        
+        super().__init__()
+
+        activation = nn.ReLU
+
+        if h_dims is None:
+            h_dims = [64,64]
+
+        layers = []
+        in_dim = in_features
+        for h_dim in h_dims:
+            layers.append(nn.Linear(in_features=in_dim, out_features=h_dim))
+            layers.append(activation())
+            in_dim = h_dim
+        layers.append(nn.Linear(in_features=in_dim, out_features=out_actions))
+        self.policy_net = nn.Sequential(*layers)
+        
+        layers = []
+        in_dim = in_features
+        for h_dim in h_dims:
+            layers.append(nn.Linear(in_features=in_dim, out_features=h_dim))
+            layers.append(activation())
+            in_dim = h_dim
+        layers.append(nn.Linear(in_features=in_dim, out_features=out_actions))
+        self.target_net = nn.Sequential(*layers)
+
+        self.soft_update(self.target_net, self.policy_net, tau=1.0)
+        self.params = {"class": self.__class__, "in_features": in_features, "out_actions": out_actions, "h_dims": h_dims}
