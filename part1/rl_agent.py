@@ -1,5 +1,4 @@
 import rospy
-from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 import os
 import numpy as np
@@ -98,7 +97,7 @@ class Agent_rl:
             a_file.close()
 
         # delete last data
-        for name in ["reward", "loss", "loss_e", "loss_p", "loss_v", "loss", "distance"]:
+        for name in ["reward", "loss", "loss_e", "loss_p", "loss_v", "loss", "distance", "place"]:
             data = []
             if not os.path.exists(f"{folder}{name}"):
                 continue
@@ -114,8 +113,6 @@ class Agent_rl:
         self.trainer = trainer
         self.save_every = save_every
 
-        self.env.initial()
-
         self.data = {}
         self.data["reward"] = []
         self.data["distance"] = []
@@ -123,7 +120,10 @@ class Agent_rl:
         self.data["loss_e"] = []
         self.data["loss_p"] = []
         self.data["loss_v"] = []
+        self.data["place"] = []
 
+        place = self.env.initial()
+        self.data["place"].append(place)
         
         model_sub = message_filters.Subscriber('gazebo/model_states', ModelStates)
         laser_sub = message_filters.Subscriber('scan', LaserScan) #every 0.2 sec
@@ -296,16 +296,20 @@ class Agent_rl:
                     np.save(f, self.data["loss_v"])
                 with open(f"{self.folder}distance", 'ab') as f:
                     np.save(f, self.data["distance"])
+                with open(f"{self.folder}place", 'ab') as f:
+                    np.save(f, self.data["place"])
                 self.data["reward"] = []
                 self.data["distance"] = []
                 self.data["loss"] = []
                 self.data["loss_e"] = []
                 self.data["loss_p"] = []
                 self.data["loss_v"] = []
+                self.data["place"] = []
                 rospy.loginfo("saved!!!")
 
             #start new episode, initial place
-            self.env.initial()
+            place = self.env.initial()
+            self.data["place"].append(place)
             self.episode_num+=1
 
             return None

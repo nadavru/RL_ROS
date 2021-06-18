@@ -610,6 +610,17 @@ class SimpleEnvTrain (SimpleEnv):
         # 14-17 circle
 
         ind = randint(0,self.num_states-1) if self.random_init else 0
+        place = None
+        if 0<=ind<=1:
+            place = 1
+        elif 2<=ind<=5:
+            place = 2
+        elif 6<=ind<=9:
+            place = 3
+        elif 10<=ind<=13:
+            place = 4
+        else:
+            place = 5
         # ind = randint(14,17) if self.random_init else 0
         init_state = self.init_states[ind]
 
@@ -617,6 +628,7 @@ class SimpleEnvTrain (SimpleEnv):
 
         set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
         resp = set_state( init_state )
+        return place
 
 
 class Rewarder(object):
