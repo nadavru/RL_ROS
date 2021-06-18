@@ -82,6 +82,7 @@ def main():
         p.map(iteration, array)
 
         # docker image rm $(docker image ls -f 'dangling=true' -q) delete all none files
+        # docker image prune also remove
 
 
 if __name__ == '__main__':
