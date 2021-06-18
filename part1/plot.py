@@ -108,7 +108,10 @@ def plot(folder=None):
 
     episodes = np.arange(data_list[0].shape[0])
 
-    places = np.random.randint(0, 6, size=len(episodes))
+    name = "place"
+    places = None
+    with open(f"{folder}{name}", 'rb') as f:
+        places=np.load(f)
 
     PLACES_NUM = 6
     fig, axis = plt.subplots(PLACES_NUM) # for every data
