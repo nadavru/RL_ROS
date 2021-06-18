@@ -5,69 +5,23 @@ from data import Experience, TrainBatch
 from typing import List
 from abc import ABC, abstractmethod
 
-class PolicyTrainer(object):
-    def __init__(
-        self,
-        model: nn.Module,
-        optimizer: optim.Optimizer,
-        loss: nn.Module,
-    ):
-        self.model = model
-        self.optimizer = optimizer
-        self.loss_fn = loss
-    
-    def to(self, device):
-        self.model.to(device)
-        self.loss_fn.to(device)
-
-    def train_batch(self, batch: TrainBatch):
-        total_loss = None
-        #  Complete the training loop for your model.
-        #  Note that this Trainer supports multiple loss functions, stored
-        #  in the list self.loss_functions, each returning a loss tensor and
-        #  a dict (as we've implemented above).
-        #   - Forward pass
-        #   - Calculate loss with each loss function. Sum the losses and
-        #     Combine the dict returned from each loss function into the
-        #     losses_dict variable (use dict.update()).
-        #   - Backprop.
-        #   - Update model parameters.
-        # ====== YOUR CODE: ======
-        total_loss = torch.Tensor([0])
-        pred = self.model(batch.states)
-        #print(f"\n{batch.action_vals=}\n{pred=}")
-
-        loss = self.loss_fn(batch, pred)
-
-        if isinstance(loss, tuple):
-            loss = loss[0].to("cpu")
-        total_loss += loss
-
-        self.optimizer.zero_grad()
-        total_loss.backward()
-        self.optimizer.step()
-        # ========================
-        print("loss = ", total_loss.item())
-
-        return total_loss
 
 class BaseTrainer(ABC):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
         entropy_coef: float = 0.3, #for entropy
         gamma: float = 0.99,
-        with_baseline: bool = False,
         device = "cpu",
+        **kw,
     ):
-        self.model = model
+        self.model = policy
         self.optimizer = optimizer(self.model.parameters(), lr=lr)
         self.entropy_coef = entropy_coef
         self.gamma = gamma
-        self.with_baseline = with_baseline
         if isinstance(device, str):
             self.device = torch.device("cuda" if device=="cuda" and torch.cuda.is_available() else "cpu")
         else:
@@ -100,6 +54,7 @@ class BaseTrainer(ABC):
         Train the policy according to batch.
         Return tuple of loss, and a dictionary of all the losses
         """
+        pass
 
 
 class QNetworkTrainer(BaseTrainer):        
@@ -111,10 +66,6 @@ class QNetworkTrainer(BaseTrainer):
 
         expected_state_action_values = (next_state_values * self.gamma) + batch.rewards
 
-        baseline = expected_state_action_values.mean()
-        if self.with_baseline:
-            expected_state_action_values -= baseline
-
         action_scores = self.model(batch.states)
         loss_e = self.entropy_loss(action_scores)
         state_action_values = action_scores.gather(1, batch.actions[..., None])
@@ -134,53 +85,45 @@ class QNetworkTrainer(BaseTrainer):
         return loss, dict(
             loss=loss, \
             loss_p=loss_p.to("cpu").item(), \
-            loss_e=loss_e.to("cpu").item(), \
-            baseline=baseline.to("cpu").item())
+            loss_e=loss_e.to("cpu").item())
 
 
 class DQNTrainer(BaseTrainer):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
         max_grad_norm: float,
         entropy_coef: float = 0.3, #for entropy
         gamma: float = 0.99,
+        tau: float = 1.0,
         target_update: int = 10,
-        with_baseline: bool = False,
         device = "cpu",
+        **kw,
     ):
         super(DQNTrainer, self).__init__(
-            model, 
+            policy, 
             optimizer, 
             lr, 
             num_actions, 
             entropy_coef, 
-            gamma, 
-            with_baseline, 
+            gamma,  
             device,
+            **kw,
         )
         
         self.max_grad_norm = max_grad_norm
+        self.tau = tau
         self.target_update = target_update
-    
-    def clip_policy_grads(self):
-        for param in self.model.q_net_policy.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        # nn.utils.clip_grad_norm_(self.q_net_policy.parameters(), self.max_grad_norm)
 
     def train_batch(self, batch: TrainBatch):
 
-        next_state_values = self.model.q_net_target(batch.next_states).max(dim=1)[0].detach() * (~batch.is_dones)
+        next_state_values = self.model.target_net(batch.next_states).max(dim=1)[0].detach() * (~batch.is_dones)
         # next_state_values[batch.is_dones] = torch.zeros(torch.sum(batch.is_dones).item(), device=self.device)
 
         expected_state_action_values = (next_state_values * self.gamma) + batch.rewards
-
-        baseline = expected_state_action_values.mean()
-        if self.with_baseline:
-            expected_state_action_values -= baseline
 
         action_scores = self.model(batch.states)
         loss_e = self.entropy_loss(action_scores)
@@ -194,25 +137,24 @@ class DQNTrainer(BaseTrainer):
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
-        self.clip_policy_grads()
+        self.model.clip_grads(self.model.policy_net, -self.max_grad_norm, self.max_grad_norm)
         self.optimizer.step()
         
         if self.current_episode % self.target_update == 0:
-            self.model.update_target()
+            self.model.soft_update(self.model.target_net, self.model.policy_net, tau=self.tau)
         
         loss = loss.to("cpu").item()
         print("total_loss = ", loss)
         return loss, dict(
             loss=loss, \
             loss_p=loss_p.to("cpu").item(), \
-            loss_e=loss_e.to("cpu").item(), \
-            baseline=baseline.to("cpu").item())
+            loss_e=loss_e.to("cpu").item())
 
 
 class AACTrainer(BaseTrainer):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
@@ -221,32 +163,25 @@ class AACTrainer(BaseTrainer):
         value_coef: float = 0.5,
         gae_coef: float = 1.0,
         gamma: float = 0.99,
-        with_baseline: bool = False,
         normalize_advantages: bool = False,
         device = "cpu",
+        **kw,
     ):
         super(AACTrainer, self).__init__(
-            model, 
+            policy, 
             optimizer, 
             lr, 
             num_actions, 
             entropy_coef, 
             gamma, 
-            with_baseline, 
             device,
+            **kw,
         )
         
         self.max_grad_norm = max_grad_norm
         self.value_coef = value_coef
         self.gae_coef = gae_coef
         self.normalize_advantages = normalize_advantages
-    
-    def clip_grads(self):
-        for param in self.model.policy_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        for param in self.model.state_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        # nn.utils.clip_grad_norm_(self.parameters(), self.max_grad_norm)
 
     def train_batch(self, batch: TrainBatch):
 
@@ -275,16 +210,13 @@ class AACTrainer(BaseTrainer):
         weighted_avg_experience_rewards = selected_action_log_proba * advantages
         loss_p = -weighted_avg_experience_rewards.mean()
 
-        '''baseline = expected_state_action_values.mean()
-        if self.with_baseline:
-            expected_state_action_values -= baseline'''
-
         loss = loss_p + self.entropy_coef*loss_e + self.value_coef*loss_v
 
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
-        self.clip_grads()
+        self.model.clip_grads(self.model.policy_net, -self.max_grad_norm, self.max_grad_norm)
+        self.model.clip_grads(self.model.state_net, -self.max_grad_norm, self.max_grad_norm)
         self.optimizer.step()
         
         loss = loss.to("cpu").item()
@@ -299,7 +231,7 @@ class AACTrainer(BaseTrainer):
 class PPOTrainer(BaseTrainer):
     def __init__(
         self,
-        model: nn.Module,
+        policy: nn.Module,
         optimizer: optim.Optimizer,
         lr: float,
         num_actions: int,
@@ -308,21 +240,21 @@ class PPOTrainer(BaseTrainer):
         value_coef: float = 0.5,
         gae_coef: float = 1.0,
         gamma: float = 0.99,
-        with_baseline: bool = False,
         normalize_advantages: bool = False,
         n_epochs: int = 10,
         clip_range: float = 0.2,
         device = "cpu",
+        **kw,
     ):
         super(PPOTrainer, self).__init__(
-            model, 
+            policy, 
             optimizer, 
             lr, 
             num_actions, 
             entropy_coef, 
             gamma, 
-            with_baseline, 
             device,
+            **kw,
         )
         
         self.max_grad_norm = max_grad_norm
@@ -331,13 +263,6 @@ class PPOTrainer(BaseTrainer):
         self.normalize_advantages = normalize_advantages
         self.n_epochs = n_epochs
         self.clip_range = clip_range
-    
-    def clip_grads(self):
-        for param in self.model.policy_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        for param in self.model.state_net.parameters():
-            param.grad.data.clamp_(-self.max_grad_norm, self.max_grad_norm)
-        # nn.utils.clip_grad_norm_(self.parameters(), self.max_grad_norm)
 
     def train_batch(self, batch: TrainBatch):
 
@@ -390,7 +315,8 @@ class PPOTrainer(BaseTrainer):
             # Optimize the model
             self.optimizer.zero_grad()
             loss.backward()
-            self.clip_grads()
+            self.model.clip_grads(self.model.policy_net, -self.max_grad_norm, self.max_grad_norm)
+            self.model.clip_grads(self.model.state_net, -self.max_grad_norm, self.max_grad_norm)
             self.optimizer.step()
         
         def mean(l):

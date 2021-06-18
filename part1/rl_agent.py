@@ -1,15 +1,16 @@
 import rospy
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
-import sys, select, os
-import time
+import os
 import numpy as np
 from gazebo_msgs.msg import ModelStates
 from data import Experience, ReplayMemory
 import torch
+import torch.nn as nn
 import message_filters
 import os
 import pickle
+import random
 #from tf2_py.transformations import euler_from_quaternion
 # a2c, ppo, sac  ,stable baseline 3
 # roslaunch tof2lidar lidar2tof.launch
@@ -45,7 +46,7 @@ class Agent_rl:
             assert self.parameters[k] == parameters[k], "different parameters."
 
 
-    def train(self, trainer, capacity=50, batch_size=10, gamma=0.99, off_policy=True, save_every=None, folder=None, from_episode=None, **kw):
+    def train(self, trainer, capacity=50, batch_size=10, gamma=0.99, eps=0, off_policy=True, save_every=None, folder=None, from_episode=None, **kw):
 
         self.memory = ReplayMemory(
             capacity = capacity, 
@@ -53,6 +54,9 @@ class Agent_rl:
             gamma = gamma, 
             off_policy = off_policy)
         self.episode_num = 1
+
+        # for exploration, 0 for fully deterministic
+        self.eps = eps
 
         self.last_state = None
         self.last_action = None
@@ -194,7 +198,11 @@ class Agent_rl:
         
         state = torch.unsqueeze(self.last_state, 0).to(self.device)
         
-        selected_action = self.policy.predict(state)
+        actions_prob = self.policy.predict(state)
+        if random.random() > self.eps:
+            selected_action = actions_prob.argmax(dim=0)
+        else:
+            selected_action = nn.functional.softmax(actions_prob, dim=-1).multinomial(num_samples=1).item()
         self.last_action = selected_action
         self.env.step(selected_action)
 
