@@ -2,7 +2,7 @@ import subprocess
 import time
 from multiprocessing import Pool
 
-IMAGE_NAME = "new_11"
+IMAGE_NAME = "new_00"
 from multiprocessing import Pool
 
 
@@ -48,8 +48,11 @@ def iteration(index):
     container_run_agent = subprocess.Popen([command_run_agent],
                                            stdout=subprocess.PIPE,
                                            stderr=subprocess.PIPE, shell=True)
-    time.sleep(200)
-    command_pass = "docker cp {0}:/root/catkin_ws/src/deep_learning/scripts/model_{1}/ /home/makers/rl_docker/codeRos".format(
+    time.sleep(50)
+    # string_a = "/home/orr/RL_ROS"
+    #string_b = /home/makers/rl_docker/codeRos
+ 
+    command_pass = "docker cp {0}:/root/catkin_ws/src/deep_learning/scripts/part1/model_{1}/ /home/orr/RL_ROS".format(
         name_of_container, index)
     container_pass = subprocess.Popen([command_pass],
                                       stdout=subprocess.PIPE,
@@ -78,10 +81,12 @@ def main():
         p = Pool()
         p.map(iteration, array)
 
+        # docker image rm $(docker image ls -f 'dangling=true' -q) delete all none files
+
 
 if __name__ == '__main__':
-    iteration(10)
-    iteration(10)
+    iteration(5)
+    iteration(5)
     # main()
     # command = "\"/home/docker/catkin_ws/src/Indoors_main/node_manager/scripts/indoors_inside_docker.py " + str(
     #     container_num) + " " + \

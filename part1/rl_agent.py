@@ -64,15 +64,18 @@ class Agent_rl:
 
         if folder is None:
             folder = "saves/"
-        else:
-            folder += "/"
-        
+
         # load checkpoint
+        diractory = os.path.dirname(__file__)  # directory of script
+        folder = '{0}/{1}'.format(diractory, folder)
+        print(folder)
+        os.umask(0)
         if not os.path.exists(folder):
             os.makedirs(folder)
-        
+
+        folder += '/'
         self.folder = folder
-        
+
         if from_episode==-1:
             models_list = [(f, f.split("_")[-1]) for f in os.listdir(folder) if f.startswith("model_")]
             if len(models_list)>0:
