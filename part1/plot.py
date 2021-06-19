@@ -4,16 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-
 # plt
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
-
-
-
-
 
 def _add_data(places_data:list,info_data:list,postion:int,color,axis,axis_num:int,axis_name:str):
     """
@@ -85,33 +77,33 @@ def plot(folder=None):
         folder = "saves/"
     else:
         folder += "/"
-    
-    '''places = []
-    if os.path.exists(f"{folder}places"):
-        with open(f"{folder}{name}", 'rb') as f:
-            try:
-                while 1:
-                    places.append(np.load(f))
-            except:
-                places = np.concatenate(places, axis=None)'''
-    
-    # places = np.random.randint(1,21, size=(275,))
-
 
     # open files
     data_list =[]
     for name in ["reward", "distance","loss","loss_e","loss_p","loss_v"]:#, "distance", "loss", "loss_e", "loss_p", "loss_v"]:
         # if not os.path.exists(f"{folder}{name}"):
         #     continue
+        data = []
         with open(f"{folder}{name}", 'rb') as f:
-            data_list.append(np.load(f))
+            try:
+                while 1:
+                    data.append(np.load(f))
+            except:
+                data = np.concatenate(data, axis=None)
+        data_list.append(data)
 
     episodes = np.arange(data_list[0].shape[0])
 
     name = "place"
     places = None
     with open(f"{folder}{name}", 'rb') as f:
-        places=np.load(f)
+        data = []
+        with open(f"{folder}{name}", 'rb') as f:
+            try:
+                while 1:
+                    data.append(np.load(f))
+            except:
+                places = np.concatenate(data, axis=None)
 
     PLACES_NUM = 6
     fig, axis = plt.subplots(PLACES_NUM) # for every data
@@ -165,7 +157,6 @@ def plot(folder=None):
 
 def test():
 
-
     d = {"year": (1971, 1939, 1941, 1996, 1975),
          "length": (121, 71, 7, 70, 71),
          "Animation": (1, 1, 0, 1, 0)}
@@ -176,9 +167,11 @@ def test():
     colors = np.where(df["Animation"] == 1, 'y', 'k')
     df.plot.scatter(x="year", y="length", c=colors)
     plt.show()
+
+
 if __name__=="__main__":
     #plot("model_aac")
 
-    dir = os.getcwd() + '/' +'data'
+    dir = os.getcwd() + "/model_10"
     print(os.path.isdir(dir))
     plot(dir)
