@@ -193,6 +193,7 @@ class AACTrainer(BaseTrainer):
         loss_v = nn.MSELoss()(batch.qvals, state_values)
         
         with torch.no_grad():
+            # basically, no need of max since shape is [N,1]
             next_state_values = self.model.state_net(batch.next_states).max(dim=1)[0] * (~batch.is_dones)
             advantages = next_state_values * self.gamma + batch.rewards - state_values
             next_gae = 0
@@ -270,6 +271,7 @@ class PPOTrainer(BaseTrainer):
         state_values = self.model.state_net(batch.states).squeeze(dim=1).detach()
         
         with torch.no_grad():
+            # basically, no need of max since shape is [N,1]
             next_state_values = self.model.state_net(batch.next_states).max(dim=1)[0] * (~batch.is_dones)
             advantages = next_state_values * self.gamma + batch.rewards - state_values
             next_gae = 0

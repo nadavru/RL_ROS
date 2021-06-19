@@ -53,6 +53,13 @@ class QNetworkPolicy(BaseNetwork):
         self.policy_net = nn.Sequential(*layers)
 
         self.params = {"class": self.__class__, "in_features": in_features, "out_actions": out_actions, "h_dims": h_dims}
+    
+    def predict(self, state):
+
+        actions_prob = super().predict(state)
+        selected_action = actions_prob.argmax(dim=0)
+        
+        return selected_action
 
 
 class DQNPolicy(BaseNetwork):
@@ -85,6 +92,13 @@ class DQNPolicy(BaseNetwork):
 
         self.soft_update(self.target_net, self.policy_net, tau=1.0)
         self.params = {"class": self.__class__, "in_features": in_features, "out_actions": out_actions, "h_dims": h_dims}
+    
+    def predict(self, state):
+
+        actions_prob = super().predict(state)
+        selected_action = actions_prob.argmax(dim=0)
+        
+        return selected_action
 
 
 class AACPolicy(BaseNetwork):
@@ -134,6 +148,13 @@ class AACPolicy(BaseNetwork):
             nn.init.orthogonal_(module.weight, gain=gain)
             if module.bias is not None:
                 module.bias.data.fill_(0.0)
+    
+    def predict(self, state):
+
+        actions_prob = super().predict(state)
+        selected_action = nn.functional.softmax(actions_prob, dim=-1).multinomial(num_samples=1).item()
+        
+        return selected_action
 
 PPOPolicy = AACPolicy
 

@@ -63,17 +63,17 @@ class Agent_rl:
         self.episode_reward = 0.0
 
         if folder is None:
-            folder = "saves/"
+            folder = "saves"
 
         # load checkpoint
-        diractory = os.path.dirname(__file__)  # directory of script
-        folder = '{0}/{1}'.format(diractory, folder)
-        print(folder)
+        directory = os.path.dirname(__file__)  # directory of script
+        folder = f"{directory}/{folder}"
+        print(f"Saving on {folder}")
         os.umask(0)
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        folder += '/'
+        folder += "/"
         self.folder = folder
 
         if from_episode==-1:
@@ -201,11 +201,11 @@ class Agent_rl:
         
         state = torch.unsqueeze(self.last_state, 0).to(self.device)
         
-        actions_prob = self.policy.predict(state)
         if random.random() > self.eps:
-            selected_action = actions_prob.argmax(dim=0)
+            selected_action = self.policy.predict(state)
         else:
-            selected_action = nn.functional.softmax(actions_prob, dim=-1).multinomial(num_samples=1).item()
+            # Exploration
+            selected_action = random.choice(np.arange(self.env.total_bins))
         self.last_action = selected_action
         self.env.step(selected_action)
 
