@@ -172,6 +172,6 @@ def test():
 if __name__=="__main__":
     #plot("model_aac")
 
-    dir = os.getcwd() + "/model_10"
+    dir = os.getcwd() + "/model_32"
     print(os.path.isdir(dir))
     plot(dir)

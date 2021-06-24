@@ -8,6 +8,10 @@ import torch
 import math
 from transformations import euler_from_quaternion, quaternion_from_euler
 
+tof_half_fov_deg = 10  # 0.5 fov of single mr beam
+noise_per_dist_meter = 0.02  # additive noise (after averaging) 
+max_range = 3.5
+
 class VelocityHandler:
     
     def __init__(self, linear_step, angular_step, max_linear, max_angular):
@@ -141,7 +145,7 @@ class SimpleTransformer2:
 class Env:
     def __init__(self, velocity_handler, rewarder, model_name="turtlebot3_waffle", num_of_bins = 360, random_init=False, verbose=False):
         
-        assert 360%num_of_bins == 0, f"num_of_bins ({num_of_bins}) should devide 360"
+        # assert 360%num_of_bins == 0, f"num_of_bins ({num_of_bins}) should devide 360"
 
         self.velocity_handler = velocity_handler
         self.rewarder = rewarder
@@ -165,13 +169,36 @@ class Env:
     
     def preprocess_ranges(self, ranges):
 
-        ranges = torch.Tensor(ranges)
+        '''ranges = torch.Tensor(ranges)
         if self.num_of_bins==360:
             return ranges
         ranges = torch.reshape(ranges, (self.num_of_bins, -1))
         ranges = torch.mean(ranges, -1)#.values
         #clip the ranges (there are inf)
-        return torch.clip(torch.FloatTensor(ranges), 0.0, 10.0)
+        return torch.clip(torch.FloatTensor(ranges), 0.0, 10.0)'''
+        new_ranges = []
+        for i in range(self.num_of_bins):
+            start_angle = i*360/self.num_of_bins - tof_half_fov_deg
+            end_angle = start_angle + 2*tof_half_fov_deg
+            start_angle = math.floor(start_angle)
+            if start_angle<0:
+                start_angle += 360
+            end_angle = math.ceil(end_angle)
+            if end_angle>=360:
+                end_angle -= 360
+            
+            current_ranges = []
+            ind = start_angle - 1
+            while ind != end_angle:
+                ind += 1
+                if ind>=360:
+                    ind -= 360
+                if ranges[ind]<max_range:
+                    current_ranges.append(ranges[ind])
+            new_ranges.append(max_range if len(current_ranges)==0 else sum(current_ranges)/len(current_ranges))
+        new_ranges = torch.Tensor(new_ranges)
+        new_ranges += noise_per_dist_meter*new_ranges*torch.normal(mean=torch.zeros(self.num_of_bins), std=torch.ones(self.num_of_bins))
+        return new_ranges
     
     def create_states(self):
         
@@ -694,13 +721,14 @@ class SimpleRightHand(Rewarder):
         max_out = 1
         dest = 3 #in a row
 
-        tmp = -(65*l//360)
-        right = ranges[-115*l//360:tmp]
+        '''tmp = -(65*l//360)
+        right = ranges[-115*l//360:tmp]'''
+        right = ranges[-5:-2] # for -5, -4, -3
         
         feedback = 10
         
         if self.eval_:
-            if min(ranges)<min_threshold or min(ranges)>max_threshold:
+            if min(ranges)<min_threshold or min(right)>max_threshold:
                 reward = -2
                 is_done = True
             
@@ -713,7 +741,7 @@ class SimpleRightHand(Rewarder):
                 reward = -feedback
                 is_done = True
                 self.in_a_row = 0
-                print(min(ranges), "min")
+                # print(min(ranges), "min")
                 return is_done, reward
             
             if min(right)>max_threshold:
@@ -722,7 +750,7 @@ class SimpleRightHand(Rewarder):
                     reward = -feedback
                     is_done = True
                     self.in_a_row = 0
-                    print(min(right), "max")
+                    # print(min(right), "max")
                     return is_done, reward
                 else:
                     self.out += 1

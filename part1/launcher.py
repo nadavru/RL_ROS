@@ -64,7 +64,7 @@ if __name__ == '__main__':
     ######################## local params
     x = 0.07
     y = 0.02
-    num_of_bins = 18
+    num_of_bins = 16
     random_init = True
     velocity_handler = SimpleTransformer2(x=x, y=y)
     rewarder = SimpleRightHand(init_dest=70)
@@ -74,6 +74,7 @@ if __name__ == '__main__':
     save_every = 25
     device="cuda"
     verbose = False
+    eval = False
     ########################    
     
     ######################## environment initialization
@@ -102,8 +103,25 @@ if __name__ == '__main__':
         "batch_size" : 32,
         "gamma" : 0.99,
         "tau" : 1.0,
-        "eps" : 0.1,
-        "entropy_coef" : [0.3, 1],
+        "eps" : 0.3,
+        "entropy_coef" : 1,
+        "target_update" : [10, 100],
+        "max_grad_norm" : 10,
+        "off_policy" : True,
+        "optimizer" : optim.Adam
+    }
+
+    DQNRainbowParams = {
+        "algorithm" : "DQNRainbow",
+        "DQN" : "DQN",
+        "hidden_layers" : None,
+        "lr" : 0.0001,
+        "buffer_size" : 1000,
+        "batch_size" : 32,
+        "gamma" : 0.99,
+        "tau" : 1.0,
+        "eps" : 0.3,
+        "entropy_coef" : 1,
         "target_update" : [10, 100],
         "max_grad_norm" : 10,
         "off_policy" : True,
@@ -117,8 +135,8 @@ if __name__ == '__main__':
         "buffer_size" : 1000,
         "batch_size" : 32,
         "gamma" : 0.99,
-        "eps" : 0.1,
-        "entropy_coef" : [0.3, 1],
+        "eps" : 0.3,
+        "entropy_coef" : 1,
         "off_policy" : True,
         "optimizer" : optim.Adam
     }
@@ -130,7 +148,7 @@ if __name__ == '__main__':
         "buffer_size" : None,
         "batch_size" : -1,
         "gamma" : 0.99,
-        "eps" : 0.1,
+        "eps" : 0.3,
         "entropy_coef" : 1,
         "max_grad_norm" : 0.5,
         "off_policy" : False,
@@ -148,10 +166,9 @@ if __name__ == '__main__':
         "buffer_size" : None,
         "batch_size" : -1,
         "gamma" : 0.99,
-        "eps" : 0.1,
+        "eps" : 0.3,
         "entropy_coef" : 1 ,
         "max_grad_norm" : 0.5,
-        "with_baseline" : False,
         "off_policy" : False,
         "optimizer" : optim.Adam,
         "ortho_init" : True,
@@ -162,23 +179,73 @@ if __name__ == '__main__':
         "clip_range" : 0.2
     }
 
+    SACParams = {
+        "algorithm" : "SAC",
+
+        "buffer_size" : 1000000,
+        "batch_size" : 10,
+        "gamma" : 0.99,
+        "eps" : 0.3,
+        "off_policy" : True,
+        "gradient_steps" : 1, #[-1, 1],
+
+        "hidden_layers" : None,
+        "n_critics" : 2,
+        
+        "optimizer" : optim.Adam,
+        "lr" : 0.0003,
+        "entropy_coef" : 1,
+        "tau": 0.005
+    }
+
+    TD3Params = {
+        "algorithm" : "TD3",
+
+        "buffer_size" : 1000000,
+        "batch_size" : 100,
+        "gamma" : 0.99,
+        "eps" : 0.3,
+        "off_policy" : True,
+        "gradient_steps" : [-1, 1],
+
+        "hidden_layers" : None,
+        "n_critics" : 2,
+        
+        "optimizer" : optim.Adam,
+        "lr" : 0.001,
+        "entropy_coef" : 1,
+        "tau": 0.005,
+        "target_policy_noise": 0.2,
+        "target_noise_clip": 0.5,
+        "policy_delay": 2
+    }
+
     params = Params()
     params.add(DQNParams)
+    params.add(DQNRainbowParams)
     params.add(QNetworkParams)
     params.add(AACParams)
     params.add(PPOParams)
+    params.add(SACParams)
+    params.add(TD3Params)
 
     Policies = {
         "DQN": DQNPolicy,
+        "DQNRainbow": DQNPolicy,
         "QNetwork": QNetworkPolicy,
         "AAC": AACPolicy,
         "PPO": PPOPolicy,
+        "SAC": SACPolicy,
+        "TD3": TD3Policy,
     }
     Trainers = {
         "DQN": DQNTrainer,
+        "DQNRainbow": DQNRainbowTrainer,
         "QNetwork": QNetworkTrainer,
         "AAC": AACTrainer,
         "PPO": PPOTrainer,
+        "SAC": SACTrainer,
+        "TD3": TD3Trainer,
     }
     ########################
     
@@ -191,7 +258,10 @@ if __name__ == '__main__':
 
     chosen_params = params.all_parameters[alg-1]
     algorithm = chosen_params["algorithm"]
-    print(f"Training with {algorithm}")
+    if not eval:
+        print(f"Training with {algorithm}")
+    else:
+        print(f"Evaluating with {algorithm}")
     Policy = Policies[algorithm]
     Trainer = Trainers[algorithm]
 
@@ -204,12 +274,14 @@ if __name__ == '__main__':
         device=device)
 
     # batch_size = size of experiences
-    agent.train(
-        trainer, 
-        capacity=chosen_params["buffer_size"], 
-        batch_size=chosen_params["batch_size"], 
-        gamma=chosen_params["gamma"], 
-        eps=chosen_params["eps"], 
-        off_policy=chosen_params["off_policy"], 
-        save_every=save_every, 
-        folder=f"model_{alg}")
+    if not eval:
+        agent.train(
+            trainer, 
+            save_every=save_every, 
+            folder=f"model_{alg}",
+            from_episode=-1,
+            **chosen_params)
+    else:
+        agent.eval(
+            folder=f"model_{alg}",
+            from_episode=-1)
