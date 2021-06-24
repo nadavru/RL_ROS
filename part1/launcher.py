@@ -259,9 +259,9 @@ if __name__ == '__main__':
     chosen_params = params.all_parameters[alg-1]
     algorithm = chosen_params["algorithm"]
     if not eval:
-        print(f"Training with {algorithm}")
+        rospy.loginfo(f"Training with {algorithm}")
     else:
-        print(f"Evaluating with {algorithm}")
+        rospy.loginfo(f"Evaluating with {algorithm}")
     Policy = Policies[algorithm]
     Trainer = Trainers[algorithm]
 

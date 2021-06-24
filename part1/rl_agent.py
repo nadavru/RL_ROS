@@ -33,7 +33,7 @@ class Agent_rl:
             self.device = torch.device("cuda" if device=="cuda" and torch.cuda.is_available() else "cpu")
         else:
             self.device = device
-        print("Using device:", self.device)
+        rospy.loginfo(f"Using device: {self.device}")
 
     
     def check_parameters(self):
@@ -76,7 +76,7 @@ class Agent_rl:
         # load checkpoint
         directory = os.path.dirname(__file__)  # directory of script
         folder = f"{directory}/{folder}"
-        print(f"Saving on {folder}")
+        rospy.loginfo(f"Saving on {folder}")
         os.umask(0)
         if not os.path.exists(folder):
             os.makedirs(folder)
