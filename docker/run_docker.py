@@ -5,7 +5,7 @@ from multiprocessing import Pool
 IMAGE_NAME = "orr_nadav_rl_base"
 from multiprocessing import Pool
 import os
-TIME = 5 *60 # (5 min)
+TIME = 5 * 60 # (5 min)
 import time
 def iteration(index):
     print(index)
@@ -68,8 +68,9 @@ def iteration(index):
         container_pass = subprocess.Popen([command_pass],
                                       stdout=subprocess.PIPE,
                                       stderr=subprocess.PIPE, shell=True)
-        if time.time() > timeout:
+        if time.time() > timeout or pass_index >50 :
             break
+        pass_index += 1
         time.sleep(60)
 
 
