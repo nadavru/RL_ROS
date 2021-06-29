@@ -6,53 +6,24 @@ from policies import *
 from environment import *
 import torch.optim as optim
 import sys
-
-class Counter():
-
-    def __init__(self, arr: list):
-        self.arr = arr
-        self.max = self.get_size(self.arr)
-        self.data = [0]*len(arr)
-    
-    @staticmethod
-    def get_size(arr):
-        num=1
-        for i in arr:
-            num *= i+1
-        return num
-    
-    def next(self):
-        for _ in range(self.max):
-            yield self.data
-            for i in range(len(self.data)):
-                if self.data[i]<self.arr[i]:
-                    self.data[i] += 1
-                    break
-                else:
-                    self.data[i] = 0
-
 class Params():
 
     def __init__(self):
         self.parameters = []
 
-    def _add_from_keys(self, keys, values):
-        counter = Counter([len(value)-1 for value in values])
-        size = len(keys)
-        for indexes in counter.next():
-            current_values = [values[i][indexes[i]] for i in range(size)]
-            yield zip(keys, current_values)
-
     def add(self, p):
         multiple_keys = []
-        multiple_values = []
+        v = [[]]
         for key, value in p.items():
             if type(value) == list:
+                v = [x+[y] for x in v for y in value]
                 multiple_keys.append(key)
-                multiple_values.append(value)
-        for params in self._add_from_keys(multiple_keys, multiple_values):
-            p.update(dict(params))
-            self.parameters.append(p.copy())
+
+        for perm in v:
+            rep = {multiple_keys[i]: v for i, v in enumerate(perm)}
+            p_ = p.copy()
+            p_.update(rep)
+            self.parameters.append(p_)
     
     @property
     def all_parameters(self):
@@ -251,6 +222,8 @@ if __name__ == '__main__':
     
     ######################## choosing algorithm
     assert len(sys.argv)==2, f"Number of arguments: {len(sys.argv)} arguments."
+    # if sys.argv[-1] in Trainers:
+
     alg = (int)(sys.argv[-1])
     num_of_algorithms = len(params.all_parameters)
     assert 1<=alg<=num_of_algorithms, f"Parameter ({alg}) should be in [1,{num_of_algorithms}]."
