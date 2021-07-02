@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import os
 
 # plt
-import pandas as pd
+# import pandas as pd
+import sys
 
 def _add_data(places_data:list,info_data:list,postion:int,color,axis,axis_num:int,axis_name:str):
     """
@@ -80,7 +81,7 @@ def plot(folder=None):
 
     # open files
     data_list =[]
-    for name in ["reward", "distance","loss","loss_e","loss_p","loss_v"]:#, "distance", "loss", "loss_e", "loss_p", "loss_v"]:
+    for name in ["reward", "distance","loss"]: #,"loss_e","loss_p","loss_v"]:#, "distance", "loss", "loss_e", "loss_p", "loss_v"]:
         # if not os.path.exists(f"{folder}{name}"):
         #     continue
         data = []
@@ -155,7 +156,7 @@ def plot(folder=None):
     plt.show()
 
 
-def test():
+'''def test():
 
     d = {"year": (1971, 1939, 1941, 1996, 1975),
          "length": (121, 71, 7, 70, 71),
@@ -166,12 +167,50 @@ def test():
 
     colors = np.where(df["Animation"] == 1, 'y', 'k')
     df.plot.scatter(x="year", y="length", c=colors)
-    plt.show()
+    plt.show()'''
+
+
+def plot2(folder):
+
+    folder += "/"
+
+    # open files
+    for name in ["reward", "distance", "loss", "loss_e", "loss_p", "loss_v"]:
+        data = []
+        if not os.path.exists(f"{folder}{name}"):
+            continue
+        with open(f"{folder}{name}", 'rb') as f:
+            try:
+                while 1:
+                    data.append(np.load(f))
+            except:
+                data = np.concatenate(data, axis=None)
+
+        episodes = np.arange(data.shape[0])
+
+        # set title of grath
+        plt.title(f"{name} graph")
+        # set x lable
+        plt.xlabel("episode")
+        # set y lable
+        plt.ylabel("reward")
+        # set grath
+        plt.scatter(episodes, data, color ="red")
+        # show grath
+        plt.show()
 
 
 if __name__=="__main__":
-    #plot("model_aac")
 
-    dir = os.getcwd() + "/model_32"
-    print(os.path.isdir(dir))
-    plot(dir)
+    assert len(sys.argv)==2, f"Number of arguments: {len(sys.argv)} arguments."
+    dir = (sys.argv[-1])
+    if dir=="all":
+        for i in range(20,33):
+            print(f"/model_{i}:")
+            dir = os.getcwd() + f"/model_{i}"
+            plot(dir)
+
+    else:
+        dir = os.getcwd() + "/" + dir
+        print(os.path.isdir(dir))
+        plot(dir)

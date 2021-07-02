@@ -359,3 +359,43 @@ class TD3Policy(BaseNetwork):
     def set_optimizer(self, optimizer, lr):
         self.actor.optimizer = optimizer(self.actor.parameters(), lr=lr)
         self.critic.optimizer = optimizer(self.critic.parameters(), lr=lr)
+
+
+
+
+class FirstReLU(nn.Module):
+    """ Custom Linear layer that ReLU only the first neuron """
+
+    def forward(self, x):
+        return torch.cat((torch.clamp(x[:,:1], min=0.0), x[:,1:]), dim=-1)
+
+class DomainNetwork(nn.Module):
+    
+    def __init__(self, in_features=5, out_actions=2, h_dims=None, **kw):
+        super().__init__()
+
+        activation = nn.ReLU
+
+        if h_dims is None:
+            h_dims = [50,50,50]
+
+        layers = []
+        in_dim = in_features
+        for h_dim in h_dims:
+            layers.append(nn.Linear(in_features=in_dim, out_features=h_dim, bias=False))
+            layers.append(activation())
+            in_dim = h_dim
+        layers.append(nn.Linear(in_features=in_dim, out_features=out_actions))
+        layers.append(FirstReLU())
+        self.model = nn.Sequential(*layers)
+    
+    def forward(self, x):
+
+        return self.model(x)
+    
+    def predict(self, x):
+
+        with torch.no_grad():
+            actions_prob = torch.squeeze(self(x))
+        
+        return actions_prob

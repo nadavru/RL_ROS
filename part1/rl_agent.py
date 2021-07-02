@@ -14,11 +14,6 @@ import random
 # a2c, ppo, sac  ,stable baseline 3
 # roslaunch tof2lidar lidar2tof.launch
 
-eps_gamma = 0.97
-
-#TODO: waypoints for objection, better reward (max dist), 16 bins instead of 18, loss graph, velocity changes
-# objection function better, add 0.1 entropy loss
-
 class Agent_rl:
     def __init__(self, policy, env, node="turtlebot3_rl", device="cpu", **kwargs):
 
@@ -47,7 +42,7 @@ class Agent_rl:
             assert self.parameters[k] == parameters[k], "different parameters."
 
 
-    def train(self, trainer, buffer_size=50, batch_size=10, gamma=0.99, eps=0, gradient_steps=1, off_policy=True, save_every=None, folder=None, from_episode=None, **kw):
+    def train(self, trainer, buffer_size=50, batch_size=10, gamma=0.99, eps=0, gradient_steps=1, learning_starts=0, eps_gamma=0.997, n_episodes = 1, off_policy=True, save_every=None, folder=None, from_episode=None, **kw):
 
         self.memory = ReplayMemory(
             buffer_size = buffer_size, 
@@ -56,7 +51,12 @@ class Agent_rl:
             off_policy = off_policy)
         self.trainer = trainer
         
+        self.experience_num = 1
         self.episode_num = 1
+        self.n_episodes = n_episodes
+
+        self.learning_starts = learning_starts
+        self.eps_gamma = eps_gamma
 
         # for exploration, 0 for fully deterministic
         self.eps = eps
@@ -93,7 +93,7 @@ class Agent_rl:
                 rospy.loginfo("Loaded from "+model)
                 self.episode_num = int(episode) + 1
 
-                if off_policy and os.path.exists(f"{folder}memory.pkl"):
+                if os.path.exists(f"{folder}memory.pkl"):
                     self.memory.load_from_data(f"{folder}memory.pkl")
                 
                 if os.path.exists(f"{folder}eps"):
@@ -103,6 +103,10 @@ class Agent_rl:
                 if os.path.exists(f"{folder}entropy"):
                     with open(f"{folder}entropy", 'rb') as f:
                         self.trainer.entropy_coef = float(np.load(f))
+                
+                if os.path.exists(f"{folder}exp_num"):
+                    with open(f"{folder}exp_num", 'rb') as f:
+                        self.experience_num = int(np.load(f))
             
         elif not from_episode is None:
             model = f"model_{from_episode}"
@@ -121,6 +125,10 @@ class Agent_rl:
             if os.path.exists(f"{folder}entropy"):
                 with open(f"{folder}entropy", 'rb') as f:
                     self.trainer.entropy_coef = float(np.load(f))
+            
+            if os.path.exists(f"{folder}exp_num"):
+                with open(f"{folder}exp_num", 'rb') as f:
+                    self.experience_num = int(np.load(f))
         
         # if not loaded, save properties
         if self.episode_num==1:
@@ -194,6 +202,8 @@ class Agent_rl:
             self.policy.load_state_dict(torch.load(f"{folder}{model}"))
             rospy.loginfo("Loaded from "+model)
         
+        self.policy.to(self.device)
+        
         self.env.eval()
         self.env.initial()
 
@@ -230,13 +240,19 @@ class Agent_rl:
         
         state = torch.unsqueeze(self.last_state, 0).to(self.device)
         
-        selected_action, self.scores = self.policy.predict(state)
-        if random.random() < self.eps:
+        selected_action = None
+        if self.experience_num < self.learning_starts:
+            selected_action = random.choice(np.arange(self.env.total_bins))
+        elif random.random() < self.eps:
             # Exploration
             selected_action = random.choice(np.arange(self.env.total_bins))
-            self.eps *= eps_gamma
+            self.eps *= self.eps_gamma
+        else:
+            selected_action, _ = self.policy.predict(state)
         self.last_action = selected_action
         self.env.step(selected_action)
+
+        self.experience_num += 1
 
         '''with torch.no_grad():
             state = torch.unsqueeze(self.last_state, 0).to(self.device)
@@ -257,7 +273,6 @@ class Agent_rl:
             experience = Experience(
                     state=self.last_state,
                     next_state=curr_state,
-                    scores=self.scores,
                     action=self.last_action,
                     reward=reward,
                     qval=0,
@@ -285,6 +300,10 @@ class Agent_rl:
 
             # train
             try:
+                if self.experience_num < self.learning_starts:
+                    raise Exception(f"At step {self.experience_num}. Learning starts at {self.learning_starts}.")
+                if self.episode_num % self.n_episodes != 0:
+                    raise Exception(f"At episode {self.episode_num}. Learning every {self.n_episodes}.")
                 losses = []
                 losses_e, losses_p, losses_v = [], [], []
                 for batch in self.memory.get_batch(self.gradient_steps if self.gradient_steps>0 else self.episode_steps):
@@ -339,6 +358,8 @@ class Agent_rl:
                     np.save(f, self.eps)
                 with open(f"{self.folder}entropy", 'wb') as f:
                     np.save(f, self.trainer.entropy_coef)
+                with open(f"{self.folder}exp_num", 'wb') as f:
+                    np.save(f, self.experience_num)
                 rospy.loginfo("saved!!!")
 
             #start new episode, initial place

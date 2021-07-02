@@ -230,23 +230,25 @@ class AACTrainer(BaseTrainer):
         action_scores = self.model(batch.states)
         state_values = self.model.state_net(batch.states)
         
-        loss_e = self.entropy_loss(action_scores)
-
-        loss_v = nn.MSELoss()(batch.qvals, state_values)
         
         with torch.no_grad():
-            # basically, no need of max since shape is [N,1]
-            next_state_values = self.model.state_net(batch.next_states).max(dim=1)[0][..., None] * (~batch.is_dones)
+            next_state_values = self.model.state_net(batch.next_states) * (~batch.is_dones)
             advantages = next_state_values * self.gamma + batch.rewards - state_values
             next_gae = 0
             for i in range(advantages.shape[0]-1, -1, -1):
                 next_gae = advantages[i] + self.gamma * self.gae_coef * next_gae
                 advantages[i] = next_gae
             # advantages = batch.qvals - state_values
+            returns = advantages + state_values
             if self.normalize_advantages:
                 advantages = (advantages - advantages.mean())
                 if batch.states.shape[0]>1:
                     advantages /= (advantages.std() + 1e-8)
+            
+
+        loss_e = self.entropy_loss(action_scores)
+
+        loss_v = nn.MSELoss()(returns, state_values)
         
         log_action_proba = nn.functional.log_softmax(action_scores, dim=1)
         selected_action_log_proba = log_action_proba.gather(dim=1, index=batch.actions)
@@ -313,14 +315,14 @@ class PPOTrainer(BaseTrainer):
         state_values = self.model.state_net(batch.states).detach()
         
         with torch.no_grad():
-            # basically, no need of max since shape is [N,1]
-            next_state_values = self.model.state_net(batch.next_states).max(dim=1)[0][..., None] * (~batch.is_dones)
+            next_state_values = self.model.state_net(batch.next_states) * (~batch.is_dones)
             advantages = next_state_values * self.gamma + batch.rewards - state_values
             next_gae = 0
             for i in range(advantages.shape[0]-1, -1, -1):
                 next_gae = advantages[i] + self.gamma * self.gae_coef * next_gae
                 advantages[i] = next_gae
             # advantages = batch.qvals - state_values
+            returns = advantages + state_values
             if self.normalize_advantages:
                 advantages = (advantages - advantages.mean())
                 if batch.states.shape[0]>1:
@@ -334,7 +336,7 @@ class PPOTrainer(BaseTrainer):
         for _ in range(self.n_epochs):
 
             state_values = self.model.state_net(batch.states)
-            loss_v = nn.MSELoss()(batch.qvals, state_values)
+            loss_v = nn.MSELoss()(returns, state_values)
             
             action_scores = self.model(batch.states)
             log_action_proba = nn.functional.log_softmax(action_scores, dim=1)

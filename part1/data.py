@@ -13,7 +13,6 @@ class Experience(NamedTuple):
     """
     state: torch.FloatTensor
     next_state: torch.FloatTensor
-    scores: torch.FloatTensor
     action: int # categorial
     reward: float
     qval: float
@@ -27,7 +26,6 @@ class TrainBatch(object):
         self,
         states: torch.FloatTensor, #[batch,state]
         next_states: torch.FloatTensor, #[batch,state]
-        scores: torch.FloatTensor, #[batch,actions]
         actions: torch.LongTensor, #[batch,1]
         rewards: torch.FloatTensor, #[batch,1]
         qvals: torch.FloatTensor, #[batch,1]
@@ -37,7 +35,6 @@ class TrainBatch(object):
 
         states = torch.stack(list(states), dim=0)
         next_states = torch.stack(list(next_states), dim=0)
-        scores = torch.stack(list(scores), dim=0)
         actions = torch.LongTensor(list(actions))[...,None]
         rewards = torch.FloatTensor(list(rewards))[...,None]
         qvals = torch.FloatTensor(list(qvals))[...,None]
@@ -46,7 +43,6 @@ class TrainBatch(object):
 
         self.states = states.to(device)
         self.next_states = next_states.to(device)
-        self.scores = scores.to(device)
         self.actions = actions.to(device)
         self.rewards = rewards.to(device)
         self.qvals = qvals.to(device)
@@ -66,9 +62,8 @@ class ReplayMemory(object):
             self.memory = pickle.load(file)
     
     def save_data(self, filename):
-        if self.off_policy:
-            with open(filename, 'wb') as output:
-                pickle.dump(self.memory, output, pickle.HIGHEST_PROTOCOL)
+        with open(filename, 'wb') as output:
+            pickle.dump(self.memory, output, pickle.HIGHEST_PROTOCOL)
 
     def push_experience(self, exp: Experience):
         self.experiences.append(exp)

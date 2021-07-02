@@ -7,6 +7,8 @@ from abc import abstractmethod
 import torch
 import math
 from transformations import euler_from_quaternion, quaternion_from_euler
+from policies import DomainNetwork
+import os
 
 tof_half_fov_deg = 10  # 0.5 fov of single mr beam
 noise_per_dist_meter = 0.02  # additive noise (after averaging) 
@@ -145,8 +147,6 @@ class SimpleTransformer2:
 class Env:
     def __init__(self, velocity_handler, rewarder, model_name="turtlebot3_waffle", num_of_bins = 360, random_init=False, verbose=False):
         
-        # assert 360%num_of_bins == 0, f"num_of_bins ({num_of_bins}) should devide 360"
-
         self.velocity_handler = velocity_handler
         self.rewarder = rewarder
         self.rewarder.convention({"ranges":[0,num_of_bins], 
@@ -202,7 +202,7 @@ class Env:
     
     def create_states(self):
         
-        state = ModelState()
+        '''state = ModelState()
         state.model_name = self.model_name
         state.pose.position.x = -1.67
         state.pose.position.y = 1.46
@@ -225,167 +225,7 @@ class Env:
             state.pose.orientation.z = 0
             state.pose.orientation.w = 0
 
-            self.init_states.append(state)
-            #TODO add more...
-
-            '''state = ModelState()
-            state.model_name = self.model_name
-            state.pose.position.x = -0.7
-            state.pose.position.y = 3.6
-            state.pose.position.z = 0
-            state.pose.orientation.x = 0
-            state.pose.orientation.y = 0
-            state.pose.orientation.z = 0
-            state.pose.orientation.w = 0
-
             self.init_states.append(state)'''
-        
-        self.num_states = len(self.init_states)
-        
-        
-    
-    def initial(self):
-
-        ind = randint(0,self.num_states-1) if self.random_init else 0
-        init_state = self.init_states[ind]
-
-        rospy.wait_for_service('/gazebo/set_model_state')
-
-        set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
-        resp = set_state( init_state )
-    
-    def eval(self):
-        self.eval_=True
-        self.rewarder.eval()
-    
-    def train(self):
-        self.eval_=False
-        self.rewarder.train()
-    
-    def get_state(self, model, laser) -> torch.Tensor:
-
-        #extract features
-        position = model.pose[-1].position
-        position = torch.Tensor([position.x, position.y])
-        orientation = model.pose[-1].orientation
-        orientation = torch.Tensor([orientation.z, orientation.w])
-        linear = model.twist[-1].linear
-        linear_vel = (linear.x**2 + linear.y**2)**0.5
-        angular_vel = model.twist[-1].angular.z
-        #linear, angular = (0, 0) if self.last_action is None else self.env.velocity_handler.category_to_velocity(self.last_action)
-        vel = torch.Tensor([linear_vel, angular_vel])
-        
-        ranges = self.preprocess_ranges(laser.ranges)
-
-        state = torch.cat((ranges, position, orientation, vel), dim=-1)
-        return_state = torch.cat((ranges, vel), dim=-1)
-        is_done, reward = self.rewarder(state)
-
-        return return_state, is_done, reward
-    
-    def step(self, action :int):
-
-        twist = Twist()
-
-        control_linear_vel, control_angular_vel = self.velocity_handler.category_to_velocity(action)
-
-        twist.linear.x = control_linear_vel; twist.linear.y = 0.0; twist.linear.z = 0.0
-
-        twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = control_angular_vel
-
-        self.pub.publish(twist)
-
-        if self.verbose:
-            rospy.loginfo("linear: " + str((int)(100*control_linear_vel)/100) + ", anglular: " + str((int)(100*control_angular_vel)/100))
-    
-    @property
-    def total_bins(self):
-
-        return self.velocity_handler.total_bins
-    
-    @property
-    def total_observations(self):
-
-        return self.num_of_bins+2
-
-class SimpleEnv (Env):
-
-    def get_state(self, model, laser) -> torch.Tensor:
-        
-        position = model.pose[-1].position
-        self.position = (position.x, position.y)
-        orientation = model.pose[-1].orientation
-        orientation = [orientation.x, orientation.y, orientation.z, orientation.w]
-        _, _, self.z = euler_from_quaternion(orientation)
-
-        #extract features
-        position = model.pose[-1].position
-        position = torch.Tensor([position.x, position.y])
-        orientation = model.pose[-1].orientation
-        orientation = torch.Tensor([orientation.z, orientation.w])
-        linear = model.twist[-1].linear
-        linear_vel = (linear.x**2 + linear.y**2)**0.5
-        angular_vel = model.twist[-1].angular.z
-        vel = torch.Tensor([linear_vel, angular_vel])
-        
-        ranges = self.preprocess_ranges(laser.ranges)
-
-        state = torch.cat((ranges, position, orientation, vel), dim=-1)
-
-        is_done, reward = self.rewarder(state)
-
-        return ranges, is_done, reward
-    
-    def get_pos_z(self, x, y):
-
-        z = self.z + math.atan(y/x)
-        if z<-math.pi:
-            z += 2*math.pi
-        elif z>math.pi:
-            z -= 2*math.pi
-        
-        dist = (x**2+y**2)**0.5
-        x_, y_ = math.cos(z)*dist, math.sin(z)*dist
-        curr_x, curr_y = self.position
-        pos_x, pos_y = (curr_x+x_, curr_y+y_)
-        
-        return pos_x, pos_y, z
-    
-    def step(self, action :int):
-
-        x, y = self.velocity_handler.category_to_velocity(action)
-
-        pos_x, pos_y, z = self.get_pos_z(x, y)
-
-        ori = quaternion_from_euler(0,0,z)
-
-        state = ModelState()
-        state.model_name = self.model_name
-        state.pose.position.x = pos_x
-        state.pose.position.y = pos_y
-        state.pose.position.z = 0
-        state.pose.orientation.x = ori[0]
-        state.pose.orientation.y = ori[1]
-        state.pose.orientation.z = ori[2]
-        state.pose.orientation.w = ori[3]
-
-        rospy.wait_for_service('/gazebo/set_model_state')
-
-        set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
-        resp = set_state( state )
-
-        if self.verbose:
-            rospy.loginfo("x: " + str(x) + ", y: " + str(y))
-    
-    @property
-    def total_observations(self):
-
-        return self.num_of_bins
-
-class SimpleEnvTrain (SimpleEnv):
-
-    def create_states(self):
-        
         
         angle = 0 #degrees
         angle = angle/180*3.1415
@@ -627,7 +467,7 @@ class SimpleEnvTrain (SimpleEnv):
             ###############
         
         self.num_states = len(self.init_states)
-    
+        
     def initial(self):
 
         # 0-1 line
@@ -637,6 +477,7 @@ class SimpleEnvTrain (SimpleEnv):
         # 14-17 circle
 
         ind = randint(0,self.num_states-1) if self.random_init else 0
+        ind = 14
         place = None
         if 0<=ind<=1:
             place = 1
@@ -648,7 +489,6 @@ class SimpleEnvTrain (SimpleEnv):
             place = 4
         else:
             place = 5
-        # ind = randint(14,17) if self.random_init else 0
         init_state = self.init_states[ind]
 
         rospy.wait_for_service('/gazebo/set_model_state')
@@ -656,6 +496,216 @@ class SimpleEnvTrain (SimpleEnv):
         set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
         resp = set_state( init_state )
         return place
+    
+    def eval(self):
+        self.eval_=True
+        self.rewarder.eval()
+    
+    def train(self):
+        self.eval_=False
+        self.rewarder.train()
+    
+    def get_state(self, model, laser) -> torch.Tensor:
+
+        #extract features
+        position = model.pose[-1].position
+        position = torch.Tensor([position.x, position.y])
+        orientation = model.pose[-1].orientation
+        orientation = torch.Tensor([orientation.z, orientation.w])
+        linear = model.twist[-1].linear
+        linear_vel = (linear.x**2 + linear.y**2)**0.5
+        angular_vel = model.twist[-1].angular.z
+        #linear, angular = (0, 0) if self.last_action is None else self.env.velocity_handler.category_to_velocity(self.last_action)
+        vel = torch.Tensor([linear_vel, angular_vel])
+        
+        ranges = self.preprocess_ranges(laser.ranges)
+
+        state = torch.cat((ranges, position, orientation, vel), dim=-1)
+        return_state = torch.cat((ranges, vel), dim=-1)
+        is_done, reward = self.rewarder(state)
+
+        return return_state, is_done, reward
+    
+    def step(self, action :int):
+
+        twist = Twist()
+
+        control_linear_vel, control_angular_vel = self.velocity_handler.category_to_velocity(action)
+
+        twist.linear.x = control_linear_vel; twist.linear.y = 0.0; twist.linear.z = 0.0
+
+        twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = control_angular_vel
+
+        self.pub.publish(twist)
+
+        if self.verbose:
+            rospy.loginfo("linear: " + str((int)(100*control_linear_vel)/100) + ", anglular: " + str((int)(100*control_angular_vel)/100))
+    
+    @property
+    def total_bins(self):
+
+        return self.velocity_handler.total_bins
+    
+    @property
+    def total_observations(self):
+
+        return self.num_of_bins+2
+
+class FirstEnv (Env):
+
+    def get_state(self, model, laser) -> torch.Tensor:
+        
+        position = model.pose[-1].position
+        self.position = (position.x, position.y)
+        orientation = model.pose[-1].orientation
+        orientation = [orientation.x, orientation.y, orientation.z, orientation.w]
+        _, _, self.z = euler_from_quaternion(orientation)
+
+        #extract features
+        position = model.pose[-1].position
+        position = torch.Tensor([position.x, position.y])
+        orientation = model.pose[-1].orientation
+        orientation = torch.Tensor([orientation.z, orientation.w])
+        linear = model.twist[-1].linear
+        linear_vel = (linear.x**2 + linear.y**2)**0.5
+        angular_vel = model.twist[-1].angular.z
+        vel = torch.Tensor([linear_vel, angular_vel])
+        
+        ranges = self.preprocess_ranges(laser.ranges)
+
+        state = torch.cat((ranges, position, orientation, vel), dim=-1)
+
+        is_done, reward = self.rewarder(state)
+
+        return ranges, is_done, reward
+    
+    def get_pos_z(self, x, y):
+
+        z = self.z + math.atan(y/x)
+        if z<-math.pi:
+            z += 2*math.pi
+        elif z>math.pi:
+            z -= 2*math.pi
+        
+        dist = (x**2+y**2)**0.5
+        x_, y_ = math.cos(z)*dist, math.sin(z)*dist
+        curr_x, curr_y = self.position
+        pos_x, pos_y = (curr_x+x_, curr_y+y_)
+        
+        return pos_x, pos_y, z
+    
+    def step(self, action :int):
+
+        x, y = self.velocity_handler.category_to_velocity(action)
+
+        pos_x, pos_y, z = self.get_pos_z(x, y)
+
+        ori = quaternion_from_euler(0,0,z)
+
+        state = ModelState()
+        state.model_name = self.model_name
+        state.pose.position.x = pos_x
+        state.pose.position.y = pos_y
+        state.pose.position.z = 0
+        state.pose.orientation.x = ori[0]
+        state.pose.orientation.y = ori[1]
+        state.pose.orientation.z = ori[2]
+        state.pose.orientation.w = ori[3]
+
+        rospy.wait_for_service('/gazebo/set_model_state')
+
+        set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
+        resp = set_state( state )
+
+        if self.verbose:
+            rospy.loginfo("x: " + str(x) + ", y: " + str(y))
+    
+    @property
+    def total_observations(self):
+
+        return self.num_of_bins
+
+
+class SecondEnv (Env):
+
+    def __init__(self, velocity_handler, rewarder, model_name="turtlebot3_waffle", num_of_bins = 360, random_init=False, verbose=False, domain_net_path="", device="cpu"):
+
+        super(SecondEnv, self).__init__(
+            velocity_handler=velocity_handler, 
+            rewarder=rewarder, 
+            model_name=model_name, 
+            num_of_bins=num_of_bins, 
+            random_init=random_init, 
+            verbose=verbose
+        )
+        
+        self.domain_net = DomainNetwork()
+        assert os.path.exists(domain_net_path), f"domain_net does not exist in path: {domain_net_path}."
+        self.domain_net.load_state_dict(torch.load(domain_net_path))
+        for param in self.domain_net.parameters():
+            param.requires_grad = False
+        
+        if isinstance(device, str):
+            self.device = torch.device("cuda" if device=="cuda" and torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
+        
+        self.domain_net.to(self.device)
+
+    def get_state(self, model, laser) -> torch.Tensor:
+        
+        '''position = model.pose[-1].position
+        self.position = (position.x, position.y)
+        orientation = model.pose[-1].orientation
+        orientation = [orientation.x, orientation.y, orientation.z, orientation.w]
+        _, _, self.z = euler_from_quaternion(orientation)'''
+
+        #extract features
+        position = model.pose[-1].position
+        position = torch.Tensor([position.x, position.y])
+        orientation = model.pose[-1].orientation
+        orientation = torch.Tensor([orientation.z, orientation.w])
+        linear = model.twist[-1].linear
+        linear_vel = (linear.x**2 + linear.y**2)**0.5
+        angular_vel = model.twist[-1].angular.z
+        vel = torch.Tensor([linear_vel, angular_vel])
+        self.vel = (linear_vel, angular_vel)
+        
+        ranges = self.preprocess_ranges(laser.ranges)
+
+        state = torch.cat((ranges, position, orientation, vel), dim=-1)
+
+        is_done, reward = self.rewarder(state)
+
+        return ranges, is_done, reward
+    
+    def step(self, action :int):
+
+        x, y = self.velocity_handler.category_to_velocity(action)
+
+        z = math.atan(y/x)
+        
+        X = torch.Tensor((*self.vel, x, y, z))[None, ...].to(self.device)
+
+        twist = Twist()
+
+        V = self.domain_net(X).cpu()[0]
+        control_linear_vel, control_angular_vel = 0.5*(V[0].item()*5 +x*2), 0.5*(V[1].item()*5+y*15)
+        # control_linear_vel, control_angular_vel = x*2, y*15
+
+        twist.linear.x = control_linear_vel; twist.linear.y = 0.0; twist.linear.z = 0.0
+
+        twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = control_angular_vel
+
+        self.pub.publish(twist)
+
+        if self.verbose:
+            rospy.loginfo("linear: " + str((int)(100*control_linear_vel)/100) + ", anglular: " + str((int)(100*control_angular_vel)/100))
+    
+    @property
+    def total_observations(self):
+
+        return self.num_of_bins
 
 
 class Rewarder(object):
@@ -703,7 +753,7 @@ class Rewarder(object):
 
 class SimpleRightHand(Rewarder):
 
-    def __init__(self, init_dest=5):
+    def __init__(self, init_dest = 300):
         self.current_dest = init_dest
         self.out = 0
         self.in_a_row = 0
@@ -725,7 +775,7 @@ class SimpleRightHand(Rewarder):
         right = ranges[-115*l//360:tmp]'''
         right = ranges[-5:-2] # for -5, -4, -3
         
-        feedback = 10
+        feedback = 1
         
         if self.eval_:
             if min(ranges)<min_threshold or min(right)>max_threshold:
@@ -741,7 +791,6 @@ class SimpleRightHand(Rewarder):
                 reward = -feedback
                 is_done = True
                 self.in_a_row = 0
-                # print(min(ranges), "min")
                 return is_done, reward
             
             if min(right)>max_threshold:
@@ -750,13 +799,12 @@ class SimpleRightHand(Rewarder):
                     reward = -feedback
                     is_done = True
                     self.in_a_row = 0
-                    # print(min(right), "max")
                     return is_done, reward
                 else:
                     self.out += 1
             
             if self.num_exp>=self.current_dest:
-                reward = feedback
+                reward = 1
                 is_done = True
                 self.in_a_row += 1
                 if self.in_a_row>=dest:
