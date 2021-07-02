@@ -286,7 +286,6 @@ if __name__ == '__main__':
     assert 1<=alg<=num_of_algorithms, f"Parameter ({alg}) should be in [1,{num_of_algorithms}]."
 
     chosen_params = params.all_parameters[alg-1]
-    print(chosen_params)
     algorithm = chosen_params["algorithm"]
 
     
